@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rendimiento — Crea tu programa</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.card{max-width:520px; margin:0 auto; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:26px 22px;}
+.result-box{max-width:520px; margin:0 auto; background:var(--panel); border-left:2px solid var(--white); border-radius:2px; padding:22px; text-align:center;}
+.result-box a{display:inline-block; margin-top:16px; background:var(--white); color:var(--bg); text-decoration:none; font-family:'Oswald', sans-serif; font-weight:700; letter-spacing:.05em; text-transform:uppercase; font-size:14px; padding:13px 28px; border-radius:3px;}
+.save-warning{color:var(--muted); font-size:12.5px; margin-top:14px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Preparación física · Rendimiento</div>
+  <h1>Crea tu <em>programa</em></h1>
+  <p class="subtitle">Rellena tus datos y te generamos un programa de gimnasio adaptado a ti y a tu deporte.</p>
+</header>
+
+<div class="hairline"></div>
+
+<div class="card" id="formCard">
+  <div class="field"><label class="field-label">Código de acceso</label><input type="text" id="fCode" placeholder="Te lo da tu entrenador"></div>
+  <div class="field"><label class="field-label">Nombre</label><input type="text" id="fName" placeholder="Ej. Laura"></div>
+  <div class="field"><label class="field-label">Edad</label><input type="number" id="fAge" placeholder="Ej. 21" min="8" max="90"></div>
+  <div class="field">
+    <label class="field-label">Deporte principal</label>
+    <input type="text" id="fSport" placeholder="Ej. Tenis, fútbol, pádel...">
+    <div class="chip-row" id="sportChips">
+      <button class="chip" data-value="Tenis">Tenis</button>
+      <button class="chip" data-value="Pádel">Pádel</button>
+      <button class="chip" data-value="Fútbol">Fútbol</button>
+      <button class="chip" data-value="Baloncesto">Baloncesto</button>
+      <button class="chip" data-value="Running">Running</button>
+      <button class="chip" data-value="Fitness general">Fitness general</button>
+    </div>
+  </div>
+  <div class="field">
+    <label class="field-label">Objetivo principal</label>
+    <select id="fObjective">
+      <option value="Rendimiento en su deporte">Rendimiento en mi deporte</option>
+      <option value="Fuerza y potencia general">Fuerza y potencia general</option>
+      <option value="Prevención de lesiones">Prevención de lesiones</option>
+      <option value="Pérdida de grasa manteniendo músculo">Pérdida de grasa manteniendo músculo</option>
+      <option value="Ganar masa muscular">Ganar masa muscular</option>
+    </select>
+  </div>
+  <div class="field">
+    <label class="field-label">Nivel de experiencia en el gimnasio</label>
+    <select id="fLevel"><option value="Principiante">Principiante</option><option value="Intermedio">Intermedio</option><option value="Avanzado">Avanzado</option></select>
+  </div>
+  <div class="field">
+    <label class="field-label">Días de gimnasio disponibles por semana</label>
+    <select id="fDays"><option value="2">2 días</option><option value="3">3 días</option><option value="4" selected>4 días</option><option value="5+">5 o más días</option></select>
+  </div>
+  <div class="field">
+    <label class="field-label">Equipamiento disponible</label>
+    <select id="fEquip"><option value="Gimnasio completo">Gimnasio completo</option><option value="Gimnasio básico">Gimnasio básico (mancuernas, poco material)</option><option value="Casa con material limitado">Casa con material limitado</option></select>
+  </div>
+  <div class="field"><label class="field-label">Limitaciones o molestias (opcional)</label><textarea id="fLimitations" placeholder="Ej. molestia en la rodilla derecha, evitar impacto..."></textarea></div>
+  <button class="form-submit" id="formSubmit">Generar mi programa</button>
+  <div class="form-error" id="formError">No se pudo generar el programa. Inténtalo de nuevo.</div>
+</div>
+
+<div class="result-box" id="resultCard" style="display:none;">
+  <div class="day-title" id="resultTitle">¡Listo!</div>
+  <p class="subtitle" style="margin:10px auto 0;" id="resultText"></p>
+  <a href="#" id="resultLink">Ver mi programa</a>
+  <div class="save-warning">Guarda este enlace (añádelo a favoritos o mándatelo por WhatsApp) — es la única forma de volver a tu programa, no hace falta contraseña.</div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><div class="loading-text">Generando tu programa...</div></div>
+
+</div>
+
+<script>
+document.querySelectorAll('#sportChips .chip').forEach(chip => {
+  chip.onclick = () => {
+    document.getElementById('fSport').value = chip.dataset.value;
+    document.querySelectorAll('#sportChips .chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  };
+});
+
+document.getElementById('formSubmit').onclick = async () => {
+  const accessCode = document.getElementById('fCode').value.trim();
+  const name = document.getElementById('fName').value.trim();
+  const age = document.getElementById('fAge').value.trim();
+  const sport = document.getElementById('fSport').value.trim();
+  const objective = document.getElementById('fObjective').value;
+  const level = document.getElementById('fLevel').value;
+  const days = document.getElementById('fDays').value;
+  const equipment = document.getElementById('fEquip').value;
+  const limitations = document.getElementById('fLimitations').value.trim();
+  const errorEl = document.getElementById('formError');
+  errorEl.style.display = 'none';
+
+  if(!accessCode){ errorEl.textContent = 'Pide el código de acceso a tu entrenador.'; errorEl.style.display = 'block'; return; }
+  if(!name || !age || !sport){ errorEl.textContent = 'Rellena al menos nombre, edad y deporte.'; errorEl.style.display = 'block'; return; }
+
+  document.getElementById('loadingOverlay').classList.add('open');
+  try{
+    const resp = await fetch('/api/self-signup', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ accessCode, name, age, sport, objective, level, days, equipment, limitations })
+    });
+    const data = await resp.json();
+    document.getElementById('loadingOverlay').classList.remove('open');
+    if(!resp.ok) throw new Error(data.error || 'Error');
+
+    document.getElementById('formCard').style.display = 'none';
+    document.getElementById('resultText').textContent = `Tu programa de ${sport.toLowerCase()} está listo, ${name}.`;
+    document.getElementById('resultLink').href = `athlete.html?token=${data.token}`;
+    document.getElementById('resultCard').style.display = 'block';
+  }catch(err){
+    document.getElementById('loadingOverlay').classList.remove('open');
+    errorEl.textContent = err.message || 'No se pudo generar el programa. Inténtalo de nuevo.';
+    errorEl.style.display = 'block';
+  }
+};
+</script>
+</body>
+</html>
