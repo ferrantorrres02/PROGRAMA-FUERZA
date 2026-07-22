@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rendimiento — Mi programa</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.error-box{margin-top:40px; text-align:center; color:var(--muted); font-size:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Preparación física · Rendimiento</div>
+  <h1>Programa de <em>fuerza</em></h1>
+  <p class="subtitle" id="headerSubtitle">Cargando tu programa...</p>
+</header>
+
+<div class="hairline"></div>
+
+<div id="app" style="display:none;">
+  <div class="recommender">
+    <div class="rec-title">¿Qué toca hoy?</div>
+    <div class="rec-question">
+      <div class="rec-label" id="recLabelSport">Práctica deportiva estos últimos 2 días</div>
+      <div class="rec-options" data-group="load">
+        <button class="rec-opt" data-value="mucho">Mucha</button>
+        <button class="rec-opt" data-value="normal">Normal</button>
+        <button class="rec-opt" data-value="poco">Poca o nada</button>
+      </div>
+    </div>
+    <div class="rec-question">
+      <div class="rec-label">Cómo notas el cuerpo</div>
+      <div class="rec-options" data-group="feeling">
+        <button class="rec-opt" data-value="energia">Con energía</button>
+        <button class="rec-opt" data-value="cansado">Cansado</button>
+        <button class="rec-opt" data-value="molestia">Alguna molestia (evitar cargar esa zona)</button>
+      </div>
+    </div>
+    <button class="rec-cta" id="recCta" disabled>Recomiéndame el día</button>
+    <div class="rec-result" id="recResult" style="display:none;"></div>
+  </div>
+
+  <div class="scoreboard" id="tabs"></div>
+  <div id="panels"></div>
+
+  <div class="mobility">
+    <b>MOVILIDAD DIARIA</b> — 10-15 min antes de cada sesión: balanceo de cadera, círculos de hombro, zancada con rotación de torso, apertura torácica. Después: 8-10 min de estiramiento estático en las zonas más exigidas por tu deporte.
+  </div>
+</div>
+
+<div class="error-box" id="errorBox" style="display:none;">Este enlace no es válido. Pide a tu entrenador que te envíe el enlace correcto.</div>
+
+<footer>Ajusta cargas según cómo te sientas — técnica siempre antes que peso.</footer>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const token = params.get('token');
+let plan = [];
+let logs = [];
+const recState = {load:null, feeling:null};
+
+function daysSince(dateStr){
+  if(!dateStr) return Infinity;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+function lastDoneFor(dayIdx){
+  const entries = logs.filter(l => l.day_index === dayIdx);
+  if(!entries.length) return null;
+  return entries[0].done_at; // logs vienen ordenados por fecha desc desde el servidor
+}
+
+async function init(){
+  if(!token){ document.getElementById('errorBox').style.display = 'block'; return; }
+  try{
+    const r = await fetch(`/api/athlete-data?token=${encodeURIComponent(token)}`);
+    if(!r.ok) throw new Error('not found');
+    const data = await r.json();
+    plan = data.athlete.plan || [];
+    logs = data.logs || [];
+    document.getElementById('headerSubtitle').textContent =
+      `Programa de ${data.athlete.name} — ${data.athlete.sport}, ${(data.athlete.objective||'').toLowerCase()}. Toca cada día para ver ejercicios, cargas y notas de técnica.`;
+    document.getElementById('recLabelSport').textContent = `Práctica de ${data.athlete.sport} estos últimos 2 días`;
+    document.getElementById('app').style.display = 'block';
+    renderDaysUI();
+    bindRecommender();
+  }catch(e){
+    document.getElementById('errorBox').style.display = 'block';
+  }
+}
+
+function renderDaysUI(){
+  const tabsEl = document.getElementById('tabs');
+  const panelsEl = document.getElementById('panels');
+  tabsEl.innerHTML = '';
+  panelsEl.innerHTML = '';
+
+  plan.forEach((day, i) => {
+    const ds = daysSince(lastDoneFor(i));
+    const tab = document.createElement('div');
+    tab.className = 'set-tab' + (i === 0 ? ' active' : '');
+    tab.innerHTML = `<div class="set-label">DÍA ${i+1}</div><div class="set-num">${i+1}</div><div class="set-name">${day.name}</div><div class="tab-priority">${day.priorityLabel}</div><div class="tab-last">${ds===Infinity?'nunca':(ds===0?'hoy':'hace '+ds+'d')}</div>`;
+    tab.onclick = () => selectDay(i);
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement('div');
+    panel.className = 'day-panel' + (i === 0 ? ' active' : '');
+    const body = day.type === 'recovery'
+      ? (day.activities||[]).map(act => `
+        <div class="activity"><div class="act-name">${act.name}</div><div class="act-detail">${act.detail}</div></div>
+      `).join('')
+      : (day.exercises||[]).map(ex => `
+        <div class="exercise">
+          <div class="ex-name">${ex.name}</div>
+          <div class="equip-tag">${ex.equip}</div>
+          <div class="ex-meta">
+            <span><b>${ex.sets}</b></span>
+            <span>Carga: <b>${ex.load}</b></span>
+            <span class="rest-btn" data-rest="${ex.rest}">Descanso: <b class="rest-val">${ex.rest}</b> ⏱</span>
+          </div>
+          <div class="ex-cue">${ex.cue}</div>
+        </div>
+      `).join('');
+
+    panel.innerHTML = `
+      <div class="ghost-num">${String(i+1).padStart(2,'0')}</div>
+      <div class="day-title">${day.name}</div>
+      <div class="day-focus">${day.focus}</div>
+      <div class="priority-badge priority-${day.priority}">${day.priorityLabel}</div>
+      ${body}
+      <button class="done-btn ${ds===0?'done':''}" data-day="${i}">${ds===0?'✓ Hecho hoy':'Marcar Día '+(i+1)+' como hecho hoy'}</button>
+    `;
+    panelsEl.appendChild(panel);
+  });
+}
+
+function selectDay(idx){
+  document.querySelectorAll('.set-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.day-panel').forEach((p,i) => p.classList.toggle('active', i===idx));
+}
+
+/* Rest timer */
+function parseRestSeconds(str){
+  const nums = (str.match(/\d+/g) || [0]).map(Number);
+  const avg = nums.length > 1 ? (nums[0] + nums[1]) / 2 : nums[0];
+  return str.includes('min') ? avg * 60 : avg;
+}
+document.addEventListener('click', (e) => {
+  const rbtn = e.target.closest('.rest-btn');
+  if(rbtn && !rbtn.dataset.running){
+    rbtn.dataset.running = '1';
+    rbtn.classList.add('resting');
+    const valEl = rbtn.querySelector('.rest-val');
+    const originalText = rbtn.dataset.rest;
+    let seconds = Math.round(parseRestSeconds(originalText));
+    const iv = setInterval(() => {
+      seconds--;
+      if(seconds <= 0){
+        clearInterval(iv);
+        valEl.textContent = '¡Listo!';
+        rbtn.classList.remove('resting');
+        rbtn.classList.add('rest-done');
+        setTimeout(() => {
+          valEl.textContent = originalText;
+          rbtn.classList.remove('rest-done');
+          delete rbtn.dataset.running;
+        }, 2500);
+        return;
+      }
+      const m = Math.floor(seconds/60), s = seconds%60;
+      valEl.textContent = m > 0 ? `${m}:${String(s).padStart(2,'0')}` : `${s}s`;
+    }, 1000);
+    return;
+  }
+
+  const dbtn = e.target.closest('.done-btn');
+  if(dbtn && !dbtn.classList.contains('done')){
+    const dayIndex = Number(dbtn.dataset.day);
+    fetch('/api/athlete-mark-done', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({token, dayIndex})
+    }).then(r => {
+      if(r.ok){
+        dbtn.textContent = '✓ Hecho hoy';
+        dbtn.classList.add('done');
+        logs.unshift({day_index: dayIndex, done_at: new Date().toISOString()});
+        document.querySelectorAll('.set-tab')[dayIndex].querySelector('.tab-last').textContent = 'hoy';
+      }
+    });
+  }
+});
+
+/* Recommender */
+function bindRecommender(){
+  document.querySelectorAll('.rec-options').forEach(group => {
+    const key = group.dataset.group;
+    group.querySelectorAll('.rec-opt').forEach(opt => {
+      opt.onclick = () => {
+        group.querySelectorAll('.rec-opt').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        recState[key] = opt.dataset.value;
+        document.getElementById('recCta').disabled = !(recState.load && recState.feeling);
+      };
+    });
+  });
+
+  document.getElementById('recCta').onclick = () => {
+    const resultEl = document.getElementById('recResult');
+    resultEl.style.display = 'block';
+
+    const recoveryIdx = plan.findIndex(d => d.type === 'recovery');
+    const trainingIdx = plan.map((d,i) => i).filter(i => i !== recoveryIdx);
+    const tierRank = {esencial:0, importante:1, complementario:2, opcional:3, adaptable:4};
+    const sortedByTier = [...trainingIdx].sort((a,b) => (tierRank[plan[a].priority] ?? 9) - (tierRank[plan[b].priority] ?? 9));
+
+    let idx, reason;
+    if(recState.feeling === 'molestia'){
+      idx = recoveryIdx >= 0 ? recoveryIdx : trainingIdx[trainingIdx.length-1];
+      reason = 'Notas una molestia — mejor recuperación activa hoy y no cargar esa zona.';
+    } else if(recState.load === 'mucho'){
+      idx = recoveryIdx >= 0 ? recoveryIdx : trainingIdx[trainingIdx.length-1];
+      reason = 'Llevas mucha carga deportiva estos días — toca recuperación para no acumular fatiga.';
+    } else {
+      let bestIdx = sortedByTier[0], bestDays = -1;
+      sortedByTier.forEach(dIdx => {
+        const d = daysSince(lastDoneFor(dIdx));
+        if(d > bestDays){ bestDays = d; bestIdx = dIdx; }
+      });
+      idx = bestIdx;
+      reason = bestDays === Infinity
+        ? 'Aún no lo has marcado como hecho — buen momento para empezar por aquí.'
+        : `Es el que llevas más días sin hacer (${bestDays === 0 ? 'hoy mismo, toca rotar' : bestDays + ' días'}).`;
+
+      if(recState.feeling === 'cansado' && ['esencial','importante'].includes(plan[idx].priority)){
+        const lighter = sortedByTier.filter(i => ['complementario','opcional'].includes(plan[i].priority));
+        if(lighter.length){
+          idx = lighter[lighter.length - 1];
+          reason = 'Notas cansancio, así que mejor bajar intensidad hoy con algo más ligero.';
+        }
+      }
+    }
+
+    resultEl.innerHTML = `<b>Recomendado: ${plan[idx].name}</b> (${plan[idx].priorityLabel})<br>${reason}`;
+    selectDay(idx);
+    document.querySelectorAll('.set-tab')[idx].scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+  };
+}
+
+init();
+</script>
+</body>
+</html>

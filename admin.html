@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Programa de Fuerza</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<style>
+.login-box{max-width:340px; margin:80px auto 0; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:26px 22px;}
+.athlete-card{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:18px 20px; margin-bottom:14px;}
+.athlete-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+.athlete-name{font-family:'Oswald', sans-serif; font-size:16px; font-weight:700; text-transform:uppercase;}
+.athlete-sub{color:var(--muted); font-size:12.5px; margin-top:2px;}
+.link-row{display:flex; gap:8px; margin-top:12px;}
+.link-row input{flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:12px; padding:8px 10px; border-radius:3px;}
+.btn-small{background:transparent; border:1px solid var(--line); color:var(--text); font-size:12px; padding:8px 12px; border-radius:3px; cursor:pointer; white-space:nowrap;}
+.btn-small:hover{border-color:var(--white);}
+.btn-danger{border-color:rgba(232,160,160,0.4); color:#E8A0A0;}
+.btn-danger:hover{border-color:#E8A0A0;}
+.log-summary{margin-top:10px; font-size:12px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap;}
+.plan-json{width:100%; min-height:160px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:monospace; font-size:11.5px; padding:10px; border-radius:4px; margin-top:10px; display:none;}
+.top-bar{display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;}
+.logout-btn{background:transparent; border:1px solid var(--line); color:var(--muted); font-size:12px; padding:7px 14px; border-radius:3px; cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="loginView">
+  <header><div class="eyebrow">Preparación física · Rendimiento</div><h1>Panel del <em>entrenador</em></h1></header>
+  <div class="login-box">
+    <div class="field"><label class="field-label">Email</label><input type="text" id="loginEmail"></div>
+    <div class="field"><label class="field-label">Contraseña</label><input type="text" id="loginPass" style="-webkit-text-security:disc; text-security:disc;"></div>
+    <button class="form-submit" id="loginBtn">Entrar</button>
+    <div class="form-error" id="loginError">Email o contraseña incorrectos.</div>
+  </div>
+</div>
+
+<div id="dashView" style="display:none;">
+  <div class="top-bar">
+    <header style="margin-bottom:0;"><div class="eyebrow">Preparación física · Rendimiento</div><h1>Panel del <em>entrenador</em></h1></header>
+    <button class="logout-btn" id="logoutBtn">Cerrar sesión</button>
+  </div>
+  <div class="hairline"></div>
+  <button class="form-submit" id="newAthleteBtn" style="max-width:260px;">+ Nuevo alumno</button>
+  <div id="athleteList" style="margin-top:22px;"></div>
+</div>
+
+<!-- Modal nuevo alumno -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" id="modalClose">✕</button>
+    <div class="modal-title">Nuevo alumno</div>
+    <div class="modal-sub">Unos datos básicos y generamos un programa adaptado a la persona y su deporte.</div>
+    <div class="field"><label class="field-label">Nombre</label><input type="text" id="fName" placeholder="Ej. Laura"></div>
+    <div class="field"><label class="field-label">Edad</label><input type="number" id="fAge" placeholder="Ej. 21" min="8" max="90"></div>
+    <div class="field">
+      <label class="field-label">Deporte principal</label>
+      <input type="text" id="fSport" placeholder="Ej. Tenis, fútbol, pádel...">
+      <div class="chip-row" id="sportChips">
+        <button class="chip" data-value="Tenis">Tenis</button>
+        <button class="chip" data-value="Pádel">Pádel</button>
+        <button class="chip" data-value="Fútbol">Fútbol</button>
+        <button class="chip" data-value="Baloncesto">Baloncesto</button>
+        <button class="chip" data-value="Running">Running</button>
+        <button class="chip" data-value="Fitness general">Fitness general</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Objetivo principal</label>
+      <select id="fObjective">
+        <option value="Rendimiento en su deporte">Rendimiento en su deporte</option>
+        <option value="Fuerza y potencia general">Fuerza y potencia general</option>
+        <option value="Prevención de lesiones">Prevención de lesiones</option>
+        <option value="Pérdida de grasa manteniendo músculo">Pérdida de grasa manteniendo músculo</option>
+        <option value="Ganar masa muscular">Ganar masa muscular</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label">Nivel de experiencia en el gimnasio</label>
+      <select id="fLevel"><option value="Principiante">Principiante</option><option value="Intermedio">Intermedio</option><option value="Avanzado">Avanzado</option></select>
+    </div>
+    <div class="field">
+      <label class="field-label">Días de gimnasio disponibles por semana</label>
+      <select id="fDays"><option value="2">2 días</option><option value="3">3 días</option><option value="4" selected>4 días</option><option value="5+">5 o más días</option></select>
+    </div>
+    <div class="field">
+      <label class="field-label">Equipamiento disponible</label>
+      <select id="fEquip"><option value="Gimnasio completo">Gimnasio completo</option><option value="Gimnasio básico">Gimnasio básico (mancuernas, poco material)</option><option value="Casa con material limitado">Casa con material limitado</option></select>
+    </div>
+    <div class="field"><label class="field-label">Limitaciones o molestias (opcional)</label><textarea id="fLimitations" placeholder="Ej. molestia en la rodilla derecha, evitar impacto..."></textarea></div>
+    <button class="form-submit" id="formSubmit">Generar programa</button>
+    <div class="form-error" id="formError">No se pudo generar el programa. Inténtalo de nuevo.</div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><div class="loading-text" id="loadingText">Generando...</div></div>
+
+</div>
+
+<script>
+const sb = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_ANON_KEY);
+
+function buildRecoveryDay(){
+  return {
+    name:'Recuperación', focus:'Movilidad y descanso activo', priority:'adaptable', priorityLabel:'Según necesidad', type:'recovery',
+    activities:[
+      {name:'Movilidad general 15 min', detail:'Cadera, hombro y tobillo — rango completo, sin forzar.'},
+      {name:'Estiramiento suave', detail:'10 min en las zonas más exigidas por el deporte.'},
+      {name:'Caminar o nadar suave (opcional)', detail:'20-30 min a intensidad muy baja si el cuerpo lo pide.'}
+    ]
+  };
+}
+
+/* ---------- Auth ---------- */
+async function checkSession(){
+  const { data } = await sb.auth.getSession();
+  if(data.session){ showDash(); } else { showLogin(); }
+}
+function showLogin(){ document.getElementById('loginView').style.display='block'; document.getElementById('dashView').style.display='none'; }
+function showDash(){ document.getElementById('loginView').style.display='none'; document.getElementById('dashView').style.display='block'; loadAthletes(); }
+
+document.getElementById('loginBtn').onclick = async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ errEl.style.display = 'block'; return; }
+  showDash();
+};
+document.getElementById('logoutBtn').onclick = async () => { await sb.auth.signOut(); showLogin(); };
+
+/* ---------- Athletes list ---------- */
+async function loadAthletes(){
+  const listEl = document.getElementById('athleteList');
+  listEl.innerHTML = 'Cargando...';
+  const { data: athletes, error } = await sb.from('athletes').select('*').order('created_at', { ascending:false });
+  if(error){ listEl.innerHTML = 'Error al cargar alumnos.'; return; }
+  if(!athletes.length){ listEl.innerHTML = '<p style="color:var(--muted);">Aún no hay alumnos. Crea el primero arriba.</p>'; return; }
+
+  const { data: logs } = await sb.from('logs').select('athlete_id, day_index, done_at').order('done_at', { ascending:false });
+
+  listEl.innerHTML = '';
+  athletes.forEach(a => {
+    const link = `${location.origin}/athlete.html?token=${a.token}`;
+    const athleteLogs = (logs||[]).filter(l => l.athlete_id === a.id);
+    const summary = (a.plan||[]).map((day,i) => {
+      const last = athleteLogs.find(l => l.day_index === i);
+      const days = last ? Math.floor((Date.now()-new Date(last.done_at).getTime())/86400000) : null;
+      return `${day.name}: ${days===null?'nunca':(days===0?'hoy':'hace '+days+'d')}`;
+    }).join(' · ');
+
+    const card = document.createElement('div');
+    card.className = 'athlete-card';
+    card.innerHTML = `
+      <div class="athlete-head">
+        <div>
+          <div class="athlete-name">${a.name}</div>
+          <div class="athlete-sub">${a.sport} · ${a.objective||''} · ${a.age} años</div>
+        </div>
+        <button class="btn-small btn-danger" data-del="${a.id}">Eliminar</button>
+      </div>
+      <div class="log-summary">${summary}</div>
+      <div class="link-row">
+        <input type="text" readonly value="${link}">
+        <button class="btn-small" data-copy="${link}">Copiar enlace</button>
+        <button class="btn-small" data-toggle="${a.id}">Ver / editar plan</button>
+      </div>
+      <textarea class="plan-json" id="plan-${a.id}">${JSON.stringify(a.plan, null, 2)}</textarea>
+      <button class="btn-small" style="display:none; margin-top:8px;" id="save-${a.id}" data-save="${a.id}">Guardar cambios</button>
+    `;
+    listEl.appendChild(card);
+  });
+}
+
+document.getElementById('athleteList').addEventListener('click', async (e) => {
+  const copyBtn = e.target.closest('[data-copy]');
+  if(copyBtn){ navigator.clipboard.writeText(copyBtn.dataset.copy); copyBtn.textContent = '¡Copiado!'; setTimeout(()=>copyBtn.textContent='Copiar enlace',1500); return; }
+
+  const toggleBtn = e.target.closest('[data-toggle]');
+  if(toggleBtn){
+    const id = toggleBtn.dataset.toggle;
+    const box = document.getElementById('plan-'+id);
+    const saveBtn = document.getElementById('save-'+id);
+    const open = box.style.display === 'block';
+    box.style.display = open ? 'none' : 'block';
+    saveBtn.style.display = open ? 'none' : 'inline-block';
+    return;
+  }
+
+  const saveBtn = e.target.closest('[data-save]');
+  if(saveBtn){
+    const id = saveBtn.dataset.save;
+    const box = document.getElementById('plan-'+id);
+    try{
+      const parsed = JSON.parse(box.value);
+      const { error } = await sb.from('athletes').update({ plan: parsed }).eq('id', id);
+      saveBtn.textContent = error ? 'Error al guardar' : '¡Guardado!';
+    }catch(err){ saveBtn.textContent = 'JSON inválido'; }
+    setTimeout(()=>saveBtn.textContent='Guardar cambios', 1500);
+    return;
+  }
+
+  const delBtn = e.target.closest('[data-del]');
+  if(delBtn){
+    if(!confirm('¿Eliminar a este alumno y todo su historial?')) return;
+    await sb.from('athletes').delete().eq('id', delBtn.dataset.del);
+    loadAthletes();
+  }
+});
+
+/* ---------- New athlete modal ---------- */
+document.getElementById('newAthleteBtn').onclick = () => document.getElementById('modalOverlay').classList.add('open');
+document.getElementById('modalClose').onclick = () => document.getElementById('modalOverlay').classList.remove('open');
+document.querySelectorAll('#sportChips .chip').forEach(chip => {
+  chip.onclick = () => {
+    document.getElementById('fSport').value = chip.dataset.value;
+    document.querySelectorAll('#sportChips .chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  };
+});
+
+document.getElementById('formSubmit').onclick = async () => {
+  const name = document.getElementById('fName').value.trim();
+  const age = document.getElementById('fAge').value.trim();
+  const sport = document.getElementById('fSport').value.trim();
+  const objective = document.getElementById('fObjective').value;
+  const level = document.getElementById('fLevel').value;
+  const days = document.getElementById('fDays').value;
+  const equipment = document.getElementById('fEquip').value;
+  const limitations = document.getElementById('fLimitations').value.trim();
+  const errorEl = document.getElementById('formError');
+  errorEl.style.display = 'none';
+
+  if(!name || !age || !sport){
+    errorEl.textContent = 'Rellena al menos nombre, edad y deporte.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('loadingText').textContent = `Generando programa para ${name}...`;
+  document.getElementById('loadingOverlay').classList.add('open');
+
+  try{
+    const { data: sessionData } = await sb.auth.getSession();
+    const jwt = sessionData.session.access_token;
+    const resp = await fetch('/api/generate-plan', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':`Bearer ${jwt}`},
+      body: JSON.stringify({ name, age, sport, objective, level, days, equipment, limitations })
+    });
+    if(!resp.ok) throw new Error('fallo al generar');
+    const { plan } = await resp.json();
+    const fullPlan = [...plan, buildRecoveryDay()];
+
+    const { error } = await sb.from('athletes').insert({
+      name, age, sport, objective, level, days, equipment, limitations, plan: fullPlan
+    });
+    if(error) throw error;
+
+    document.getElementById('loadingOverlay').classList.remove('open');
+    ['fName','fAge','fSport','fLimitations'].forEach(id => document.getElementById(id).value = '');
+    document.querySelectorAll('#sportChips .chip').forEach(c => c.classList.remove('selected'));
+    loadAthletes();
+  }catch(err){
+    console.error(err);
+    document.getElementById('loadingOverlay').classList.remove('open');
+    document.getElementById('modalOverlay').classList.add('open');
+    errorEl.textContent = 'No se pudo generar el programa. Comprueba tu conexión e inténtalo de nuevo.';
+    errorEl.style.display = 'block';
+  }
+};
+
+checkSession();
+</script>
+</body>
+</html>
